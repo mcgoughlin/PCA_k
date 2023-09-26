@@ -35,3 +35,4 @@ if __name__ == "__main__":
         entry['variance'] = pca.explained_variance_/np.sum(pca.explained_variance_)
         entry['average_pointcloud'] = average_pointcloud.reshape((aligned_shape[1],aligned_shape[2]))
         data.append(entry)
+        print(entry['variance'],sum(entry['variance'][:4]))
