@@ -3,9 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import procrustes
 import pandas as pd
+import open3d as o3d
 
 # Load the data
-csv_fp = '/Users/mcgoug01/Downloads/Data/objects/merged_training_set/features_labelled.csv'
+csv_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/features_labelled.csv'
 df = pd.read_csv(csv_fp)
 
 #kidneys are rows, measurements are columns in df
@@ -28,7 +29,7 @@ print(df['position'].value_counts())
 # we will then use procrustes analysis to align the pointclouds, and find the average kidney shape
 
 # define the path to the obj files
-obj_fp = '/Users/mcgoug01/Downloads/Data/objects/kits23sncct/cleaned_objs'
+obj_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
 
 # define a function to load the obj files
 def load_obj(fp):
