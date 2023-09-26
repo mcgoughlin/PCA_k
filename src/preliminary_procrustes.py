@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial import procrustes, Delaunay
+from scipy.spatial.distance import cdist
+from scipy.optimize import linear_sum_assignment
 import pandas as pd
 import open3d as o3d
 
@@ -67,6 +68,7 @@ def convert_rectangular_to_triangular(vertices, faces):
 
     return new_faces
 
+
 # Load the data
 csv_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/features_labelled.csv'
 df = pd.read_csv(csv_fp)
@@ -90,85 +92,99 @@ print(df['position'].value_counts())
 # now we want to load the obj files of each kidney, and generate a pointcloud for each kidney
 # we will then use procrustes analysis to align the pointclouds, and find the average kidney shape
 
-# define the path to the obj files
-obj_folder = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
+#split df between left and right kidney
+df_left = df.loc[df['position'] == 'left']
+df_right = df.loc[df['position'] == 'right']
+icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=20000, relative_fitness=1e-7, relative_rmse=1e-7)
 
-#obj files are defined as case-'nii.gz'+ '_' + 'position' + '.obj'
-# e.g. case_00000_left.obj
-# use o3d to load the obj files and generate pointclouds
+for df in [df_left, df_right]:
 
-# create empty list to store pointclouds
-pointclouds = []
+    # define the path to the obj files
+    obj_folder = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
 
-# iterate through each row in df
-for index, row in df.iterrows():
-    # create the file path to the obj file
-    obj_fn = row['case'][:-7] + '_' + row['position'] + '.obj'
-    print(obj_folder, obj_fn)
-    obj_fp = os.path.join(obj_folder, obj_fn)
-    # load the obj file
-    vertices,simplices = load_obj_file(obj_fp)
-    # convert the rectangular mesh to a triangular mesh
-    simplices = convert_rectangular_to_triangular(vertices, simplices)
-    # convert the vertices and simplices to numpy arrays
-    vertices = np.array(vertices)
-    simplices = np.array(simplices)
+    #obj files are defined as case-'nii.gz'+ '_' + 'position' + '.obj'
+    # e.g. case_00000_left.obj
+    # use o3d to load the obj files and generate pointclouds
 
-    # load triangulation into open3d
-    mesh = o3d.geometry.TriangleMesh()
-    mesh.vertices = o3d.utility.Vector3dVector(vertices)
-    mesh.triangles = o3d.utility.Vector3iVector(simplices)
-    # convert the mesh to a pointcloud
-    pcd = mesh.sample_points_poisson_disk(number_of_points=10000)
-    print(pcd)
-    # add the pointcloud to the list of pointclouds
-    pointclouds.append(pcd)
+    # create empty list to store pointclouds
+    pointclouds = []
 
-# now we have a list of pointclouds, we can use procrustes analysis to align them
-# first we need to convert the pointclouds to numpy arrays
-pointclouds = np.array(pointclouds)
-print(pointclouds.shape)
+    # iterate through each row in df
+    for index, row in df.iterrows():
+        # create the file path to the obj file
+        obj_fn = row['case'][:-7] + '_' + row['position'] + '.obj'
+        print(obj_folder, obj_fn)
+        obj_fp = os.path.join(obj_folder, obj_fn)
+        # load the obj file
+        vertices,simplices = load_obj_file(obj_fp)
+        # convert the rectangular mesh to a triangular mesh
+        simplices = convert_rectangular_to_triangular(vertices, simplices)
+        # convert the vertices and simplices to numpy arrays
+        vertices = np.array(vertices)
+        simplices = np.array(simplices)
 
-# now we can use procrustes analysis to align the pointclouds
-# we will use the first pointcloud as the reference pointcloud
-# we will then align all other pointclouds to the reference pointcloud
-# we will then average the aligned pointclouds to find the average kidney shape
+        # load triangulation into open3d
+        mesh = o3d.geometry.TriangleMesh()
+        mesh.vertices = o3d.utility.Vector3dVector(vertices)
+        mesh.triangles = o3d.utility.Vector3iVector(simplices)
+        # convert the mesh to a pointcloud
+        pcd = mesh.sample_points_poisson_disk(number_of_points=1000)
+        print(pcd)
+        # add the pointcloud to the list of pointclouds
+        pointclouds.append(pcd)
 
-# create empty list to store aligned pointclouds
-aligned_pointclouds = []
+    # now we have a list of pointclouds, we can use procrustes analysis to align them
+    # first we need to convert the pointclouds to numpy arrays
+    pointclouds = np.array(pointclouds)
 
-# define reference pointcloud as first pointcloud
-reference_pointcloud = pointclouds[0]
+    # now we can use procrustes analysis to align the pointclouds
+    # we will use the first pointcloud as the reference pointcloud
+    # we will then align all other pointclouds to the reference pointcloud
+    # we will then average the aligned pointclouds to find the average kidney shape
 
-# iterate through each pointcloud
-for pointcloud in pointclouds[1:]:
-    # align the pointcloud to the reference pointcloud
-    mtx1, mtx2, disparity = procrustes(reference_pointcloud, pointcloud)
-    # add the aligned pointcloud to the list of aligned pointclouds
-    aligned_pointclouds.append(mtx2)
+    # create empty list to store aligned pointclouds
+    aligned_pointclouds = []
 
-# convert the list of aligned pointclouds to a numpy array
-aligned_pointclouds = np.array(aligned_pointclouds)
-print(aligned_pointclouds.shape)
+    # define reference pointcloud as first pointcloud
+    reference_pointcloud = np.asarray(pointclouds[0].points)
+    reference_pointcloud -= reference_pointcloud.mean(axis=0)
+    target_cloud = o3d.geometry.PointCloud()
+    target_cloud.points = o3d.utility.Vector3dVector(reference_pointcloud)
+    aligned_pointclouds.append(np.asarray(target_cloud.points))
 
-# now we can average the aligned pointclouds to find the average kidney shape
-# we will use the numpy mean function to average the aligned pointclouds
-average_pointcloud = np.mean(aligned_pointclouds, axis=0)
-print(average_pointcloud.shape)
+    # iterate through each pointcloud
+    for source_cloud in pointclouds[1:]:
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+            source_cloud, target_cloud,  # Source and target point clouds
+            max_correspondence_distance=1000,
+            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),  # Point-to-point ICP
+            criteria = icp_criteria  # Convergence criteria
+        )
+        source_cloud.transform(reg_p2p.transformation)
+        pc = np.asarray(source_cloud.points)
+        distances = cdist(target_cloud.points, pc)
+        target_index, source_index = linear_sum_assignment(distances)
+        # add the aligned pointcloud to the list of aligned pointclouds
+        aligned_pointclouds.append(np.asarray(source_cloud.points)[source_index])
 
-# now we can plot the average kidney shape
-# we will use matplotlib to plot the average kidney shape
-# create a figure
-fig = plt.figure()
-# add a subplot
-ax = fig.add_subplot(111, projection='3d')
-# plot the average kidney shape
-ax.scatter(average_pointcloud[:,0], average_pointcloud[:,1], average_pointcloud[:,2])
-# set the axis limits
-ax.set_xlim(-100,100)
-ax.set_ylim(-100,100)
-ax.set_zlim(-100,100)
-# show the plot
-plt.show()
+    # convert the list of aligned pointclouds to a numpy array
+    aligned_pointclouds = np.array(aligned_pointclouds)
+
+    # now we can average the aligned pointclouds to find the average kidney shape
+    # we will use the numpy mean function to average the aligned pointclouds
+    average_pointcloud = np.mean(aligned_pointclouds, axis=0)
+
+    # now we can plot the average pointcloud
+    # plot the average pointcloud
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(average_pointcloud[:,0], average_pointcloud[:,1], average_pointcloud[:,2])
+    plt.show(block=True)
 
 
+    # # plot all pointclouds with a low opacity
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # for pointcloud in aligned_pointclouds:
+    #     ax.scatter(pointcloud[:,0], pointcloud[:,1], pointcloud[:,2], alpha=0.1)
+    # plt.show(block=True)
