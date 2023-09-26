@@ -32,6 +32,6 @@ if __name__ == "__main__":
         cov_matrix = np.cov(variance_point_clouds)
         pca.fit(cov_matrix)
         entry['components'] = pca.components_.reshape((n_components,aligned_shape[1],aligned_shape[2]))
-        entry['variance'] = pca.explained_variance_
+        entry['variance'] = pca.explained_variance_/np.sum(pca.explained_variance_)
         entry['average_pointcloud'] = average_pointcloud.reshape((aligned_shape[1],aligned_shape[2]))
         data.append(entry)
