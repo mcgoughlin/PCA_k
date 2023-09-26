@@ -3,6 +3,7 @@ from PCA_k.procrustes_utils import find_average
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 if __name__ == "__main__":
     obj_folder = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
@@ -40,25 +41,27 @@ if __name__ == "__main__":
         # plot the average point cloud and +/- 1 standard deviation of the first 2 components, where the central plot is just the average point cloud
         # in a 3x3 grid
         lim = np.abs(average_pointcloud).max()*1.1
-        fig,ax = plt.subplots(1,3,subplot_kw={'projection':'3d'},figsize=(20,12))
-        plt.subplots_adjust(wspace=0,hspace=0)
+
 
         for component_index in range(1,4):
-            max_index = np.argsort(pca.explained_variance_)[-component_index]
-            first_component = pca.components_[max_index].reshape((aligned_shape[1],aligned_shape[2]))*np.sqrt(pca.explained_variance_[max_index])*2
+            fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(20, 12))
+            plt.subplots_adjust(wspace=0, hspace=0)
+            index = np.argsort(pca.explained_variance_)[-component_index]
+            component_of_variation = pca.components_[index].reshape((aligned_shape[1],aligned_shape[2]))*np.sqrt(pca.explained_variance_[index])*2
 
-            ax[0].scatter(average_pointcloud[:,0]-first_component[:,0], average_pointcloud[:,1]-first_component[:,1],
-                              average_pointcloud[:,2]-first_component[:,2])
+            ax[0].scatter(average_pointcloud[:,0]-component_of_variation[:,0], average_pointcloud[:,1]-component_of_variation[:,1],
+                              average_pointcloud[:,2]-component_of_variation[:,2])
 
             ax[1].scatter(average_pointcloud[:, 0], average_pointcloud[:, 1],
                                average_pointcloud[:, 2])
 
-            ax[2].scatter(average_pointcloud[:,0]+first_component[:,0], average_pointcloud[:,1]+first_component[:,1],
-                              average_pointcloud[:,2]+first_component[:,2])
+            ax[2].scatter(average_pointcloud[:,0]+component_of_variation[:,0], average_pointcloud[:,1]+component_of_variation[:,1],
+                              average_pointcloud[:,2]+component_of_variation[:,2])
             for j in range(3):
                 ax[j].set_xlim(-lim, lim)
                 ax[j].set_ylim(-lim, lim)
                 ax[j].set_zlim(-lim, lim)
+                ax[j].view_init(-20, 45)
 
             fig.suptitle(side+' kidney, component '+str(component_index),fontsize=20)
             plt.show(block=True)
