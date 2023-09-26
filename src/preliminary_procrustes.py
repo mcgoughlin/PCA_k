@@ -68,123 +68,88 @@ def convert_rectangular_to_triangular(vertices, faces):
 
     return new_faces
 
-
-# Load the data
-csv_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/features_labelled.csv'
-df = pd.read_csv(csv_fp)
-
-#kidneys are rows, measurements are columns in df
-# df contains column on the first 10 cysts and 10 cancer volumes present in each kidney.
-# we want to select kidneys with no cyst or cancer volumes present, i.e., when all 10 columns
-# for cyst / cancers are = 0
-
-# columns containing cyst measurements are labelled 'cyst_0_vol' to 'cyst_9_vol', and
-# columns containing cancer measurements are labelled 'cancer_0_vol' to 'cancer_9_vol'
-
-# select rows where all cyst and cancer measurements are 0
-df = df.loc[(df['cyst_0_vol'] == 0) & (df['cyst_1_vol'] == 0) & (df['cyst_2_vol'] == 0) & (df['cyst_3_vol'] == 0) & (df['cyst_4_vol'] == 0) & (df['cyst_5_vol'] == 0) & (df['cyst_6_vol'] == 0) & (df['cyst_7_vol'] == 0) & (df['cyst_8_vol'] == 0) & (df['cyst_9_vol'] == 0) & (df['cancer_0_vol'] == 0) & (df['cancer_1_vol'] == 0) & (df['cancer_2_vol'] == 0) & (df['cancer_3_vol'] == 0) & (df['cancer_4_vol'] == 0) & (df['cancer_5_vol'] == 0) & (df['cancer_6_vol'] == 0) & (df['cancer_7_vol'] == 0) & (df['cancer_8_vol'] == 0) & (df['cancer_9_vol'] == 0)]
-
-# now drop all columns except 'case', and 'position'
-df = df[['case','position']]
-# print the number of 'left' and 'right' kidneys, taken from the 'position' column
-print(df['position'].value_counts())
-
-# now we want to load the obj files of each kidney, and generate a pointcloud for each kidney
-# we will then use procrustes analysis to align the pointclouds, and find the average kidney shape
-
-#split df between left and right kidney
-df_left = df.loc[df['position'] == 'left']
-df_right = df.loc[df['position'] == 'right']
-icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=20000, relative_fitness=1e-7, relative_rmse=1e-7)
-
-for df in [df_left, df_right]:
-
-    # define the path to the obj files
+def process_dataframe(df):
     obj_folder = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
-
-    #obj files are defined as case-'nii.gz'+ '_' + 'position' + '.obj'
-    # e.g. case_00000_left.obj
-    # use o3d to load the obj files and generate pointclouds
-
-    # create empty list to store pointclouds
     pointclouds = []
 
-    # iterate through each row in df
     for index, row in df.iterrows():
-        # create the file path to the obj file
         obj_fn = row['case'][:-7] + '_' + row['position'] + '.obj'
-        print(obj_folder, obj_fn)
         obj_fp = os.path.join(obj_folder, obj_fn)
-        # load the obj file
-        vertices,simplices = load_obj_file(obj_fp)
-        # convert the rectangular mesh to a triangular mesh
+        vertices, simplices = load_obj_file(obj_fp)
         simplices = convert_rectangular_to_triangular(vertices, simplices)
-        # convert the vertices and simplices to numpy arrays
         vertices = np.array(vertices)
         simplices = np.array(simplices)
-
-        # load triangulation into open3d
         mesh = o3d.geometry.TriangleMesh()
         mesh.vertices = o3d.utility.Vector3dVector(vertices)
         mesh.triangles = o3d.utility.Vector3iVector(simplices)
-        # convert the mesh to a pointcloud
         pcd = mesh.sample_points_poisson_disk(number_of_points=1000)
-        print(pcd)
-        # add the pointcloud to the list of pointclouds
         pointclouds.append(pcd)
 
-    # now we have a list of pointclouds, we can use procrustes analysis to align them
-    # first we need to convert the pointclouds to numpy arrays
-    pointclouds = np.array(pointclouds)
+    return pointclouds
 
-    # now we can use procrustes analysis to align the pointclouds
-    # we will use the first pointcloud as the reference pointcloud
-    # we will then align all other pointclouds to the reference pointcloud
-    # we will then average the aligned pointclouds to find the average kidney shape
-
-    # create empty list to store aligned pointclouds
+def procrustes_analysis(target_points, reference_pointclouds, include_target=True):
     aligned_pointclouds = []
 
-    # define reference pointcloud as first pointcloud
-    reference_pointcloud = np.asarray(pointclouds[0].points)
-    reference_pointcloud -= reference_pointcloud.mean(axis=0)
     target_cloud = o3d.geometry.PointCloud()
-    target_cloud.points = o3d.utility.Vector3dVector(reference_pointcloud)
-    aligned_pointclouds.append(np.asarray(target_cloud.points))
+    target_cloud.points = o3d.utility.Vector3dVector(target_points)
+    if include_target:
+        aligned_pointclouds.append(np.asarray(target_cloud.points))
 
-    # iterate through each pointcloud
-    for source_cloud in pointclouds[1:]:
+    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=20000, relative_fitness=1e-7, relative_rmse=1e-7)
+
+    for source_cloud in reference_pointclouds:
         reg_p2p = o3d.pipelines.registration.registration_icp(
-            source_cloud, target_cloud,  # Source and target point clouds
+            source_cloud, target_cloud,
             max_correspondence_distance=1000,
-            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),  # Point-to-point ICP
-            criteria = icp_criteria  # Convergence criteria
+            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+            criteria=icp_criteria
         )
         source_cloud.transform(reg_p2p.transformation)
         pc = np.asarray(source_cloud.points)
         distances = cdist(target_cloud.points, pc)
         target_index, source_index = linear_sum_assignment(distances)
-        # add the aligned pointcloud to the list of aligned pointclouds
         aligned_pointclouds.append(np.asarray(source_cloud.points)[source_index])
 
-    # convert the list of aligned pointclouds to a numpy array
     aligned_pointclouds = np.array(aligned_pointclouds)
-
-    # now we can average the aligned pointclouds to find the average kidney shape
-    # we will use the numpy mean function to average the aligned pointclouds
     average_pointcloud = np.mean(aligned_pointclouds, axis=0)
+
+    return average_pointcloud
+
+# Main function
+def main():
+    csv_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/features_labelled.csv'
+    df = pd.read_csv(csv_fp)
+
+    # Select rows where all cyst and cancer measurements are 0
+    columns_to_check = ['cyst_{}_vol'.format(i) for i in range(10)] + ['cancer_{}_vol'.format(i) for i in range(10)]
+    df = df[df[columns_to_check].sum(axis=1) == 0]
+
+    # Select only 'case' and 'position' columns
+    df = df[['case', 'position']]
+    print(df['position'].value_counts())
+
+    df_left = df.loc[df['position'] == 'left']
+    df_right = df.loc[df['position'] == 'right']
+    for df in [df_left,df_right]:
+        pointclouds = process_dataframe(df)
+        target_pointcloud = np.asarray(pointclouds[0].points)
+        target_pointcloud -= np.mean(target_pointcloud, axis=0)
+        average_pointcloud = procrustes_analysis(target_pointcloud, pointclouds[1:],include_target=True)
+        average_pointcloud -= np.mean(average_pointcloud, axis=0)
+        average_pointcloud = procrustes_analysis(average_pointcloud,pointclouds,include_target=False)
+        average_pointcloud -= np.mean(average_pointcloud, axis=0)
 
     # now we can plot the average pointcloud
     # plot the average pointcloud
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.scatter(average_pointcloud[:,0], average_pointcloud[:,1], average_pointcloud[:,2])
+    lim = np.abs(average_pointcloud).max()
+    ax.set_xlim(-lim,lim)
+    ax.set_ylim(-lim,lim)
+    ax.set_zlim(-lim,lim)
+
     plt.show(block=True)
 
-
-    # # plot all pointclouds with a low opacity
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # for pointcloud in aligned_pointclouds:
-    #     ax.scatter(pointcloud[:,0], pointcloud[:,1], pointcloud[:,2], alpha=0.1)
-    # plt.show(block=True)
+if __name__ == "__main__":
+    main()
