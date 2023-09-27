@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     obj_folder = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/cleaned_objs'
     features_csv_fp = '/media/mcgoug01/nvme/ThirdYear/kits23sncct_objdata/features_labelled.csv'
-    number_of_points = 1024
+    number_of_points = 1000
     n_iter = 20000
     tolerance = 1e-7
     n_components = 10
+    visualise_compontents=5
 
     df = pd.read_csv(features_csv_fp)
 
@@ -44,7 +45,7 @@ if __name__ == "__main__":
         lim = np.abs(average_pointcloud).max()*1.1
 
 
-        for component_index in range(1,4):
+        for component_index in range(1,visualise_compontents+1):
             fig, ax = plt.subplots(1, 3, subplot_kw={'projection': '3d'}, figsize=(20, 12))
             plt.subplots_adjust(wspace=0, hspace=0)
             index = np.argsort(pca.explained_variance_)[-component_index]
