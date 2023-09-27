@@ -114,11 +114,57 @@ def procrustes_analysis(target_points, reference_pointclouds, include_target=Tru
 
     return average_pointcloud, aligned_pointclouds
 
+def procrustes_analysis_normalised(target_points, reference_pointclouds, include_target=True,
+                        max_iterations=20000, tolerance=1e-7):
+    aligned_pointclouds = []
+
+    target_cloud = o3d.geometry.PointCloud()
+    target_cloud.points = o3d.utility.Vector3dVector(target_points)
+    if include_target:
+        aligned_pointclouds.append(np.asarray(target_cloud.points))
+
+    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iterations, relative_fitness=tolerance, relative_rmse=tolerance)
+
+    for source_cloud in reference_pointclouds:
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+            source_cloud, target_cloud,
+            max_correspondence_distance=1000,
+            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+            criteria=icp_criteria
+        )
+        source_cloud.transform(reg_p2p.transformation)
+        pc = np.asarray(source_cloud.points)
+        distances = cdist(target_cloud.points, pc)
+        target_index, source_index = linear_sum_assignment(distances)
+        aligned_pointclouds.append(np.asarray(source_cloud.points)[source_index])
+
+    aligned_pointclouds = np.array(aligned_pointclouds)
+    aligned_pointclouds = np.array([pc / cdist(pc, pc).max() for pc in aligned_pointclouds])
+    average_pointcloud = np.mean(aligned_pointclouds, axis=0)
+
+    return average_pointcloud, aligned_pointclouds
+
 # Main function
 def find_average(df, obj_folder, number_of_points, n_iter, tolerance):
     pointclouds = process_dataframe(df, obj_folder, number_of_points=number_of_points)
+
     target_pointcloud = np.asarray(pointclouds[0].points)
     target_pointcloud -= np.mean(target_pointcloud, axis=0)
+
     average_pointcloud,_ = procrustes_analysis(target_pointcloud, pointclouds[1:], include_target=True, max_iterations=n_iter, tolerance=tolerance)
     average_pointcloud -= np.mean(average_pointcloud, axis=0)
     return procrustes_analysis(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter, tolerance=tolerance)
+
+def find_average_normalised(df, obj_folder, number_of_points, n_iter, tolerance):
+    pointclouds = process_dataframe(df, obj_folder, number_of_points=number_of_points)
+
+    target_pointcloud = pointclouds[0].points
+    target_pointcloud -= np.mean(target_pointcloud, axis=0)
+    print(cdist(target_pointcloud, target_pointcloud).max())
+    target_pointcloud /= cdist(target_pointcloud, target_pointcloud).max()
+
+    average_pointcloud,_ = procrustes_analysis_normalised(target_pointcloud, pointclouds[1:], include_target=True, max_iterations=n_iter, tolerance=tolerance)
+    average_pointcloud -= np.mean(average_pointcloud, axis=0)
+    print(cdist(average_pointcloud, average_pointcloud).max())
+    average_pointcloud /= cdist(average_pointcloud, average_pointcloud).max()
+    return procrustes_analysis_normalised(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter, tolerance=tolerance)
