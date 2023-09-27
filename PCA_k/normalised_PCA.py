@@ -51,14 +51,17 @@ if __name__ == "__main__":
             index = np.argsort(pca.explained_variance_)[-component_index]
             component_of_variation = pca.components_[index].reshape((aligned_shape[1],aligned_shape[2]))
 
+            colour_one = np.linalg.norm(component_of_variation,axis=1)
+            colour_two = np.linalg.norm(component_of_variation,axis=1)*-1
+
             ax[0].scatter(average_pointcloud[:,0]-component_of_variation[:,0], average_pointcloud[:,1]-component_of_variation[:,1],
-                              average_pointcloud[:,2]-component_of_variation[:,2])
+                              average_pointcloud[:,2]-component_of_variation[:,2],c=colour_one,vmin=colour_two.min(),vmax=colour_one.max())
 
             ax[1].scatter(average_pointcloud[:, 0], average_pointcloud[:, 1],
                                average_pointcloud[:, 2])
 
             ax[2].scatter(average_pointcloud[:,0]+component_of_variation[:,0], average_pointcloud[:,1]+component_of_variation[:,1],
-                              average_pointcloud[:,2]+component_of_variation[:,2])
+                              average_pointcloud[:,2]+component_of_variation[:,2],c=colour_two,vmin=colour_two.min(),vmax=colour_one.max())
             for j in range(3):
                 ax[j].set_xlim(-lim, lim)
                 ax[j].set_ylim(-lim, lim)
