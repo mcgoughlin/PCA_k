@@ -1,12 +1,14 @@
 import os
-import numpy as np
-from scipy.spatial.distance import cdist
-from scipy.optimize import linear_sum_assignment
-import open3d as o3d
-from tqdm import tqdm
 import time
 
-#write function to read vertices from obj file
+import numpy as np
+import open3d as o3d
+from scipy.optimize import linear_sum_assignment
+from scipy.spatial.distance import cdist
+from tqdm import tqdm
+
+
+# write function to read vertices from obj file
 def load_obj_file(file_path):
     """
     Load an OBJ file and return vertices and faces.
@@ -42,6 +44,7 @@ def load_obj_file(file_path):
 
     return vertices, faces
 
+
 def convert_rectangular_to_triangular(vertices, faces):
     """
     Convert a rectangular 3D mesh into a triangular 3D mesh by splitting all rectangular faces.
@@ -68,7 +71,8 @@ def convert_rectangular_to_triangular(vertices, faces):
 
     return new_faces
 
-def process_dataframe(df,obj_folder,number_of_points=1000):
+
+def process_dataframe(df, obj_folder, number_of_points=1000):
     pointclouds = []
 
     for index, row in df.iterrows():
@@ -86,6 +90,7 @@ def process_dataframe(df,obj_folder,number_of_points=1000):
 
     return pointclouds
 
+
 def procrustes_analysis(target_points, reference_pointclouds, include_target=True,
                         max_iterations=20000, tolerance=1e-7):
     aligned_pointclouds = []
@@ -95,7 +100,9 @@ def procrustes_analysis(target_points, reference_pointclouds, include_target=Tru
     if include_target:
         aligned_pointclouds.append(np.asarray(target_cloud.points))
 
-    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iterations, relative_fitness=tolerance, relative_rmse=tolerance)
+    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iterations,
+                                                                     relative_fitness=tolerance,
+                                                                     relative_rmse=tolerance)
 
     for i in tqdm(range(len(reference_pointclouds))):
         source_cloud = reference_pointclouds[i]
@@ -116,8 +123,9 @@ def procrustes_analysis(target_points, reference_pointclouds, include_target=Tru
 
     return average_pointcloud, aligned_pointclouds
 
+
 def procrustes_analysis_normalised(target_points, reference_pointclouds, include_target=True,
-                        max_iterations=20000, tolerance=1e-7):
+                                   max_iterations=20000, tolerance=1e-7):
     aligned_pointclouds = []
 
     target_cloud = o3d.geometry.PointCloud()
@@ -125,7 +133,9 @@ def procrustes_analysis_normalised(target_points, reference_pointclouds, include
     if include_target:
         aligned_pointclouds.append(np.asarray(target_cloud.points))
 
-    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iterations, relative_fitness=tolerance, relative_rmse=tolerance)
+    icp_criteria = o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=max_iterations,
+                                                                     relative_fitness=tolerance,
+                                                                     relative_rmse=tolerance)
     time.sleep(1)
     for i in tqdm(range(len(reference_pointclouds))):
         source_cloud = reference_pointclouds[i]
@@ -147,6 +157,7 @@ def procrustes_analysis_normalised(target_points, reference_pointclouds, include
 
     return average_pointcloud, aligned_pointclouds
 
+
 # Main function
 def find_average(df, obj_folder, number_of_points, n_iter, tolerance):
     pointclouds = process_dataframe(df, obj_folder, number_of_points=number_of_points)
@@ -155,11 +166,13 @@ def find_average(df, obj_folder, number_of_points, n_iter, tolerance):
     target_pointcloud -= np.mean(target_pointcloud, axis=0)
     print('Pass one of two')
 
-
-    average_pointcloud,_ = procrustes_analysis(target_pointcloud, pointclouds[1:], include_target=True, max_iterations=n_iter, tolerance=tolerance)
+    average_pointcloud, _ = procrustes_analysis(target_pointcloud, pointclouds[1:], include_target=True,
+                                                max_iterations=n_iter, tolerance=tolerance)
     average_pointcloud -= np.mean(average_pointcloud, axis=0)
     print('Pass two of two')
-    return procrustes_analysis(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter, tolerance=tolerance)
+    return procrustes_analysis(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter,
+                               tolerance=tolerance)
+
 
 def find_average_normalised(df, obj_folder, number_of_points, n_iter, tolerance):
     pointclouds = process_dataframe(df, obj_folder, number_of_points=number_of_points)
@@ -169,9 +182,11 @@ def find_average_normalised(df, obj_folder, number_of_points, n_iter, tolerance)
     target_pointcloud /= cdist(target_pointcloud, target_pointcloud).max()
 
     print('Pass one of two')
-    average_pointcloud,_ = procrustes_analysis_normalised(target_pointcloud, pointclouds[1:], include_target=True, max_iterations=n_iter, tolerance=tolerance)
+    average_pointcloud, _ = procrustes_analysis_normalised(target_pointcloud, pointclouds[1:], include_target=True,
+                                                           max_iterations=n_iter, tolerance=tolerance)
     average_pointcloud -= np.mean(average_pointcloud, axis=0)
     average_pointcloud /= cdist(average_pointcloud, average_pointcloud).max()
 
     print('Pass two of two')
-    return procrustes_analysis_normalised(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter, tolerance=tolerance)
+    return procrustes_analysis_normalised(average_pointcloud, pointclouds, include_target=False, max_iterations=n_iter,
+                                          tolerance=tolerance)
