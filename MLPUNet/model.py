@@ -36,7 +36,6 @@ class MLPUnet(nn.Module):
             x = self.activation(x)
             x = self.dropout(x)
 
-
         downsampled.append(x)
         # Bottom layer
         x = self.bottom(x)

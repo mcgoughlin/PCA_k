@@ -34,6 +34,7 @@ class PointcloudDataset(Dataset):
 
     def switch_to_right(self):
         self.left_is_input = False
+
     def __getitem__(self,idx):
         # load left and right pointclouds - make sure shape is (1,number of points)
         left_pointcloud = np.load(self.left_filepath + self.left_filenames[idx]).reshape(1,-1)
