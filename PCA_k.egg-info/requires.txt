@@ -3,3 +3,6 @@ numpy
 scipy
 pandas
 open3d
+scikit-learn
+tqdm
+torch
