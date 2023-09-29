@@ -37,14 +37,14 @@ class MLPUnet(nn.Module):
         # each layer will have equal number of points in and out
         for i in range(self.depth):
             self.layers.append(nn.Linear(self.n_points//(2**i),self.n_points//(2**(i))))
-            nn.init.xavier_uniform_(self.layers[-1].weight)
+            nn.init.kaiming_uniform_(self.layers[-1].weight,nonlinearity='relu')
 
         for i in range(self.depth):
             self.downsample.append(nn.Linear(self.n_points//(2**i),self.n_points//(2**(i+1))))
 
         for i in range(self.depth-1,-1,-1):
             self.upsample.append(nn.Linear(self.n_points//(2**i),self.n_points//(2**(i))))
-            nn.init.xavier_uniform_(self.upsample[-1].weight)
+            nn.init.kaiming_uniform_(self.upsample[-1].weight,nonlinearity='relu')
 
         self.dropout = nn.Dropout(self.dropout)
 
